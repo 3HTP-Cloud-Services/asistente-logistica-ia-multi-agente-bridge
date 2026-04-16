@@ -11,7 +11,7 @@ import { Construct } from "constructs";
 import * as path from "path";
 
 const commonFunctionProps = {
-    architecture: Architecture.ARM_64,
+    architecture: Architecture.X86_64,
     logRetention: RetentionDays.THREE_MONTHS,
 };
 
@@ -64,7 +64,7 @@ export class CommonPythonPowertoolsFunction extends CommonPythonFunction {
     constructor(scope: Construct, id: string, props: CommonPythonFunctionProps) {
         // Use the AWS managed Powertools layer instead of building our own
         // The ARN format is arn:aws:lambda:{region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:{version}
-        // For Python 3.12 and ARM64, we use the appropriate layer version
+        // For Python 3.12 and X86_64, we use the appropriate layer version
         const powertoolsLayer = LayerVersion.fromLayerVersionArn(
             scope,
             `${id}PowertoolsLayer`,

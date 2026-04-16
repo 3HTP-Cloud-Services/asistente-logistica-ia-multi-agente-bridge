@@ -11,7 +11,7 @@
         "build": "tsc",
         "watch": "tsc -w",
         "test": "jest",
-        "cdk": "npx aws-cdk@2.1005.0",
+        "cdk": "npx aws-cdk@latest",
         "synth": "cdk synth"
     },
     "devDependencies": {

@@ -143,16 +143,12 @@ We recommend creating a [Budget](https://docs.aws.amazon.com/cost-management/lat
 ### Model access
 
 Navigate to the Amazon Bedrock console, and enable the following models: 
-`Cohere Embed English V3`
-`Nova Pro`
-`Nova Lite`
-`Nova Micro`
-`Sonnet 3.5 V1`
-`Claude 3 Haiku`
-`Sonnet 3.5 V2`
-`Haiku 3.5 V1`
+`Amazon Nova Pro`
+`Amazon Nova Lite`
+`Amazon Nova Micro`
+`Amazon Titan Text Embeddings V2`
 
-![Diagram](docs/kit/images/model_access.png)
+> **Note:** The original repository listed 8 models including Claude and Cohere, but the code only uses these 4 Amazon models. No third-party models are required.
 
 ## Pre-Requisites
 

@@ -5,9 +5,14 @@
     "codeArtifact": false,
     "codePipeline": false,
     "midway": false,
+    "features": {
+        "deployCognito": false,
+        "deployFrontend": false,
+        "deployWAF": false
+    },
     "accounts": {
         "dev": {
-            "number": "{ACCOUNT_NUMBER}",
+            "number": "ACCOUNT_ID_AQUI",
             "region": "us-east-1"
         }
     }

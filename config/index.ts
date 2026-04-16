@@ -14,10 +14,17 @@ export interface AccountConfig {
     midwaySecretId?: string;
 }
 
+export interface FeaturesConfig {
+    deployCognito: boolean;
+    deployFrontend: boolean;
+    deployWAF: boolean;
+}
+
 interface BaseProjectConfig {
     projectId: string;
     codeArtifact: boolean;
     midway: boolean;
+    features?: FeaturesConfig;
     accounts: {
         [key: string]: AccountConfig;
     };
@@ -46,6 +53,11 @@ const baseSchema = {
         }),
     codeArtifact: z.boolean(),
     midway: z.boolean(),
+    features: z.object({
+        deployCognito: z.boolean(),
+        deployFrontend: z.boolean(),
+        deployWAF: z.boolean(),
+    }).optional(),
     accounts: z.record(
         z.string(),
         z.object({

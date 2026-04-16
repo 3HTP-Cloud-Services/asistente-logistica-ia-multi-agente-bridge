@@ -22,12 +22,14 @@ import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 import { readFileSync } from "fs";
 import * as path from "path";
+import { AmazonAuroraVectorStore } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/amazonaurora";
 import { CommonBucket } from "../../../../common/constructs/s3";
 import { KnowledgeBaseSyncChecker } from "../kb-sync-checker/construct";
 
 interface PersonalizationSubAgentProps {
     loggingBucket: Bucket;
     executorFunction: Function;
+    auroraVectorStore: AmazonAuroraVectorStore;
 }
 
 export class PersonalizationSubAgent extends Construct {
@@ -39,7 +41,7 @@ export class PersonalizationSubAgent extends Construct {
     constructor(scope: Construct, id: string, props: PersonalizationSubAgentProps) {
         super(scope, id);
 
-        const { loggingBucket, executorFunction } = props;
+        const { loggingBucket, executorFunction, auroraVectorStore } = props;
 
         const personalizationKnowledgeBase = new VectorKnowledgeBase(
             this,
@@ -48,6 +50,7 @@ export class PersonalizationSubAgent extends Construct {
                 embeddingsModel: BedrockFoundationModel.TITAN_EMBED_TEXT_V2_1024,
                 instruction:
                     "Use this knowledge base to retrieve user preferences and browsing history.",
+                vectorStore: auroraVectorStore,
             }
         );
 

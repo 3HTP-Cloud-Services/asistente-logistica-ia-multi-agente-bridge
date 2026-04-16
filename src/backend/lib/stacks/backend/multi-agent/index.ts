@@ -6,6 +6,8 @@ import {
     CrossRegionInferenceProfile,
     CrossRegionInferenceProfileRegion,
 } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/bedrock";
+import { AmazonAuroraVectorStore } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/amazonaurora";
+import { AuroraPostgresEngineVersion } from "aws-cdk-lib/aws-rds";
 import { Duration, CustomResource, Stack } from "aws-cdk-lib";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Bucket } from "aws-cdk-lib/aws-s3";
@@ -40,6 +42,13 @@ export class MultiAgent extends Construct {
 
         const loggingBucket = new CommonBucket(this, "loggingBucket", {});
 
+        // Aurora PostgreSQL compartido para todas las Knowledge Bases
+        // Reemplaza OpenSearch Serverless (~$700/mes por colección) por Aurora Serverless v2 (~$43/mes total)
+        const auroraVectorStore = new AmazonAuroraVectorStore(this, "auroraVectorStore", {
+            embeddingsModelVectorDimension: 1024, // Titan Embed Text V2 usa 1024 dimensiones
+            postgreSQLVersion: AuroraPostgresEngineVersion.VER_15_8,
+        });
+
         const executorFunction = new CommonPythonPowertoolsFunction(this, "executorFunction", {
             entry: path.join(__dirname, "action-group", "executor-function"),
             memorySize: 1024,
@@ -72,6 +81,7 @@ export class MultiAgent extends Construct {
             {
                 loggingBucket,
                 executorFunction,
+                auroraVectorStore,
             }
         );
 
@@ -89,11 +99,13 @@ export class MultiAgent extends Construct {
             {
                 loggingBucket,
                 executorFunction,
+                auroraVectorStore,
             }
         );
 
         const troubleshootSubAgent = new TroubleshootSubAgent(this, "troubleshootSubAgent", {
             loggingBucket,
+            auroraVectorStore,
         });
         
         // Extract the bucket deployments from each subagent to use as dependencies later

@@ -1,4 +1,4 @@
-import { App } from "aws-cdk-lib";
+import { App, Tags } from "aws-cdk-lib";
 import { PresetStageType, projectConfig } from "../../../config";
 import { PipelineStack } from "../lib/stacks/pipeline";
 import { ApplicationStage } from "../lib/stage";

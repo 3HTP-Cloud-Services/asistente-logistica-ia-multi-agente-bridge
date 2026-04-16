@@ -1,6 +1,7 @@
 import { Aspects, Stage, StageProps } from "aws-cdk-lib";
 import { AwsSolutionsChecks, NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
+import { projectConfig } from "../../../config";
 import { BackendStack } from "./stacks/backend";
 import { FrontendDeploymentStack, FrontendStack } from "./stacks/frontend";
 
@@ -11,18 +12,35 @@ export class ApplicationStage extends Stage {
         // Set CDK_DEFAULT_REGION for the AWS PowerTools layer
         process.env.CDK_DEFAULT_REGION = props.env?.region || 'us-east-1';
 
-        const frontend = new FrontendStack(this, "frontend");
+        // Leer features del config (por defecto todo activado para compatibilidad)
+        const features = projectConfig.features ?? {
+            deployCognito: true,
+            deployFrontend: true,
+            deployWAF: true,
+        };
+
+        // Frontend solo se despliega si deployFrontend es true
+        let urls = ["https://localhost:3000"];
+        let frontend: FrontendStack | undefined;
+
+        if (features.deployFrontend) {
+            frontend = new FrontendStack(this, "frontend");
+            urls = frontend.urls;
+        }
 
         const backend = new BackendStack(this, "backend", {
-            urls: frontend.urls,
+            urls,
+            features,
         });
 
-        // this stack must be named frontendDeployment
-        new FrontendDeploymentStack(this, "frontendDeployment", {
-            websiteBucket: frontend.websiteBucket,
-            distribution: frontend.distribution,
-            environmentVariables: backend.environmentVariables,
-        });
+        // Frontend deployment solo si hay frontend
+        if (features.deployFrontend && frontend) {
+            new FrontendDeploymentStack(this, "frontendDeployment", {
+                websiteBucket: frontend.websiteBucket,
+                distribution: frontend.distribution,
+                environmentVariables: backend.environmentVariables,
+            });
+        }
 
         NagSuppressions.addResourceSuppressions(
             this,

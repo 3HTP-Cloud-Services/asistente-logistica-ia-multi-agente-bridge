@@ -18,11 +18,13 @@ import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 import { readFileSync } from "fs";
 import * as path from "path";
+import { AmazonAuroraVectorStore } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/amazonaurora";
 import { CommonBucket } from "../../../../common/constructs/s3";
 import { KnowledgeBaseSyncChecker } from "../kb-sync-checker/construct";
 
 interface TroubleshootSubAgentProps {
     loggingBucket: Bucket;
+    auroraVectorStore: AmazonAuroraVectorStore;
 }
 
 export class TroubleshootSubAgent extends Construct {
@@ -34,7 +36,7 @@ export class TroubleshootSubAgent extends Construct {
     constructor(scope: Construct, id: string, props: TroubleshootSubAgentProps) {
         super(scope, id);
 
-        const { loggingBucket } = props;
+        const { loggingBucket, auroraVectorStore } = props;
 
         const troubleshootKnowledgeBase = new VectorKnowledgeBase(
             this,
@@ -43,6 +45,7 @@ export class TroubleshootSubAgent extends Construct {
                 embeddingsModel: BedrockFoundationModel.TITAN_EMBED_TEXT_V2_1024,
                 instruction:
                     "Use this knowledge base to retrieve user preferences and browsing history.",
+                vectorStore: auroraVectorStore,
             }
         );
 
