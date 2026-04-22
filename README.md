@@ -160,26 +160,32 @@ All prices are **on-demand, US East (N. Virginia) — us-east-1**, sourced from 
 
 ### Calculator 1 — Mode 1: WhatsApp only (`deployCognito: false`)
 
-**What gets deployed:** 5 Bedrock Agents · 4 Knowledge Bases · Aurora pgvector · Lambda (action groups + webhook) · API Gateway · Athena + Glue · S3 · VPC + NAT Gateway · Secrets Manager · CloudWatch
+**Deployed:** 5 Bedrock Agents · 4 Knowledge Bases · Aurora pgvector · Lambda · API Gateway · Athena + Glue · S3 · VPC (2 NAT GWs) · Secrets Manager · CloudWatch
 
-| AWS Service | Unit Price | Monthly Usage | Monthly Cost |
-|---|---|---|---|
-| **Nova Pro** — Supervisor Agent | $0.24/1M in · $0.97/1M out | 75K × 1K in + 500 out tokens | 75M×$0.24 + 37.5M×$0.97 = **$54.38** |
-| **Nova Micro** — SA1 + SA3 | $0.035/1M in · $0.14/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.035 + 18.75M×$0.14 = **$3.94** |
-| **Nova Lite** — SA2 + SA4 | $0.06/1M in · $0.24/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.06 + 18.75M×$0.24 = **$6.75** |
-| **Titan Text Embeddings V2** — Knowledge Base queries | $0.02/1M tokens | ~18,750 KB queries × 500 tokens | **$0.19** |
-| **Aurora PostgreSQL Serverless v2** — shared vector store for all 4 KBs | $0.06/ACU-hour + $0.10/GB/month | 0.5 ACU × 720h + 5 GB storage | **$22.10** |
-| **AWS Lambda** — webhook handler + action group executor | $0.20/1M req + compute | 150K req × 2s × 512MB | **$3.00** |
-| **Amazon API Gateway** — WhatsApp webhook endpoint | $3.50/1M requests | 75,000 requests | **$0.26** |
-| **Amazon Athena** — SQL queries from SA1, SA2, SA4 | $5.00/TB scanned | ~56K queries × 10MB avg | **$2.80** |
-| **AWS Glue** — data catalog for Athena | $1.00/100K requests | catalog requests | **$0.10** |
-| **Amazon S3** — structured data + KB documents | $0.023/GB + requests | 5 GB storage + GET/PUT | **$1.50** |
-| **VPC + NAT Gateway** — required for Aurora (2 AZs, 1 NAT per AZ) | $0.045/h + $0.045/GB | 2 NAT GWs × 720h + 3 GB/month | **$65.07** |
-| **AWS Secrets Manager** — Aurora credentials | $0.40/secret/month | 1 secret + API calls | **$0.40** |
-| **Amazon CloudWatch** — logs + metrics | $0.30/GB ingested | 5 GB logs + metrics | **$5.00** |
-| **TOTAL** | | | **~$166/month** |
+**Assumptions:** 500 active users · 5 messages/day = 75,000 messages/month · Supervisor invoked on every message (2 req/min × 24h) · Sub-agents invoked on 50% of messages each (1 req/min × 24h) · Cross-region inference
 
-<!-- PASTE AWS CALCULATOR SCREENSHOT OR LINK HERE — MODE 1 -->
+| AWS Service | Monthly Cost |
+|---|---|
+| Amazon Bedrock — Nova Pro (Supervisor Agent, cross-region inference) | $207.36 |
+| Amazon Bedrock — Nova Micro (SA1 Order Mgmt + SA3 Troubleshooting) | $4.54 |
+| Amazon Bedrock — Nova Lite (SA2 Product Rec + SA4 Personalization) | $7.78 |
+| Amazon Bedrock — Titan Text Embeddings V2 (Knowledge Bases) | $0.19 |
+| Amazon Aurora PostgreSQL Serverless v2 (vector store for all 4 KBs) | $49.27 |
+| AWS Lambda (webhook handler + action group executor) | $0.01 |
+| Amazon API Gateway (WhatsApp webhook endpoint) | $0.24 |
+| Amazon S3 (KB documents + structured data CSVs) | $0.09 |
+| Amazon VPC + NAT Gateway (2 AZs, required for Aurora) | $65.74 |
+| AWS Secrets Manager (Aurora credentials) | $0.41 |
+| Amazon CloudWatch (logs + metrics) | $8.53 |
+| Amazon Athena (SQL queries from SA1, SA2, SA4) | $2.67 |
+| AWS Glue (data catalog for Athena) | $0.06 |
+| **TOTAL** | **~$346.89/month** |
+
+> The NAT Gateway (~$66) is the largest fixed infrastructure cost because Aurora requires private subnets. If the client already has a VPC with NAT Gateways, this cost is eliminated.
+>
+> Full estimate: https://calculator.aws/#/estimate?id=2d81ed71a7b1970df7df2c3814cfed030e09e902
+
+<!-- PASTE AWS CALCULATOR SCREENSHOT HERE — MODE 1 -->
 
 ---
 
