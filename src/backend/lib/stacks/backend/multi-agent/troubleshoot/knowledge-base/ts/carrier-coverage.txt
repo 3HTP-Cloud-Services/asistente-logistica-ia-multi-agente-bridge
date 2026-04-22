@@ -1,0 +1,82 @@
+CARRIER COVERAGE AND RATES — SHIPPING PLATFORM
+
+== CARRIER A (National Express) ==
+Coverage: Nationwide (major cities and metropolitan areas)
+Main zones: Capital city, northern region, central region, coastal cities
+Delivery times:
+- Same state: 1-2 business days
+- Neighboring states: 2-3 business days
+- Cross-country: 3-5 business days
+Approximate rates (standard package):
+- 1-5 kg: $10 - $18 USD
+- 5-10 kg: $18 - $28 USD
+- 10-20 kg: $28 - $45 USD
+Max weight: 70 kg
+Max dimensions: 120 x 80 x 80 cm
+Pickup hours: Monday to Friday 9:00 - 18:00
+Services: Standard ground, Express (next day in main zones)
+
+== CARRIER B (National Standard) ==
+Coverage: Nationwide including rural areas
+Main zones: All major cities + secondary cities
+Delivery times:
+- Same state: 1 business day
+- National express: 1-2 business days
+- National standard: 2-4 business days
+Approximate rates (standard package):
+- 1-5 kg: $12 - $22 USD
+- 5-10 kg: $22 - $35 USD
+- 10-20 kg: $35 - $55 USD
+Max weight: 50 kg (standard), 300 kg (freight)
+Max dimensions: 120 x 80 x 80 cm
+Pickup hours: Monday to Friday 9:00 - 17:00, Saturday 9:00 - 13:00
+Services: Express, Standard, Economy
+
+== CARRIER C (National + International) ==
+Coverage: Nationwide and international
+Main zones: All major cities + international destinations
+Delivery times:
+- Express (next day): Available in metropolitan areas
+- Standard: 2-3 business days
+- Economy: 3-5 business days
+Approximate rates (standard package):
+- 1-5 kg: $15 - $24 USD
+- 5-10 kg: $24 - $38 USD
+- 10-20 kg: $38 - $60 USD
+Max weight: 68 kg
+Max dimensions: 274 cm length, 330 cm length + girth
+Pickup hours: Monday to Friday 8:00 - 18:00
+Services: Priority Overnight, Standard Overnight, Express Saver, Ground
+
+== CARRIER D (Same-Day Metro) ==
+Coverage: Main metropolitan areas only
+Main zones: Capital metro area, northern metro, central metro
+Delivery times:
+- Same day: Available in capital (orders before 12:00)
+- Next day: Metropolitan zones
+- 2-3 days: Other covered zones
+Approximate rates (standard package):
+- 1-5 kg: $8 - $14 USD
+- 5-10 kg: $14 - $22 USD
+- 10-20 kg: $22 - $35 USD
+Max weight: 30 kg
+Max dimensions: 100 x 60 x 60 cm
+Pickup hours: Monday to Saturday 8:00 - 20:00
+Services: Same Day, Next Day, Economy
+
+== PLATFORM POLICIES ==
+
+Return policy:
+If a label was not used within 30 days of generation, you may request a refund of 90% of the value as platform credit. Used labels are non-refundable.
+
+Lost or damaged package claims:
+1. Report within 72 hours of the estimated delivery date
+2. Provide tracking number, photos of packaging (if applicable), and description of contents
+3. The platform manages the claim with the carrier
+4. Resolution time: 5-15 business days depending on the carrier
+5. Maximum compensation: according to each carrier's policy
+
+Balance policy:
+- Account balance does not expire
+- Funds are reflected within 1-24 hours after payment confirmation
+- No cash refunds — only platform credit

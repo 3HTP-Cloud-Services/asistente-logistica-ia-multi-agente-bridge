@@ -9,7 +9,7 @@ Flujo:
   Lambda hace HTTP request a BASE_URL + apiPath -> Retorna respuesta al agente
 
 Variables de entorno:
-  BASE_URL    - URL base de la API del cliente (ej: https://api.kroni.io)
+  BASE_URL    - URL base de la API del cliente (ej: https://api.yourcompany.com)
   API_KEY     - (opcional) API key para autenticacion
   AUTH_HEADER - (opcional) Header de autenticacion personalizado (default: Authorization)
 """

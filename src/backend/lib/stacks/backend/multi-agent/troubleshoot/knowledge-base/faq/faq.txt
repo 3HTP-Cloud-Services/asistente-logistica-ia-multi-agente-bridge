@@ -1,0 +1,28 @@
+FREQUENTLY ASKED QUESTIONS — SHIPPING PLATFORM
+
+What is this platform?
+This is a multi-carrier shipping platform for e-commerce sellers. It allows you to quote, generate shipping labels, and track shipments with multiple carriers from a single place.
+
+Which carriers are available?
+We currently work with: Carrier A (national express), Carrier B (national standard), Carrier C (national + international), and Carrier D (same-day metro areas).
+
+How do I get a shipping quote?
+Provide the origin zip code, destination zip code, and package weight. The system will show quotes from all available carriers so you can choose the best option.
+
+How do I generate a shipping label?
+After quoting, select your preferred carrier and confirm the shipment details (sender, recipient, weight). The label is generated automatically and the cost is deducted from your balance.
+
+How do I track my shipment?
+Provide your tracking number and the system will retrieve the real-time status directly from the carrier.
+
+How do I add funds to my account?
+You can add funds via bank transfer or deposit. Once the payment is confirmed, the balance is reflected in your account within 1-24 hours.
+
+What should I do if my package is lost or damaged?
+Contact platform support with your tracking number. We will manage the claim directly with the carrier. Resolution time depends on each carrier's policy.
+
+Can I schedule a pickup?
+Yes, when generating a label you can request a home pickup. Availability depends on the carrier and the zone.
+
+Are there weight or dimension limits?
+Yes, each carrier has its own limits. Check the carrier coverage section for specific limits per carrier.

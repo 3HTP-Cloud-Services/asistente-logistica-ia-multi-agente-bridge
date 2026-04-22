@@ -44,7 +44,7 @@ export class WhatsAppIntegration extends Construct {
 
         // API Gateway REST para recibir webhooks de Meta Cloud API
         const api = new apigateway.RestApi(this, "whatsappApi", {
-            restApiName: "kroni-whatsapp-webhook",
+            restApiName: "multi-agent-whatsapp-webhook",
             description: "Webhook endpoint para integración con WhatsApp via Meta Cloud API",
         });
 

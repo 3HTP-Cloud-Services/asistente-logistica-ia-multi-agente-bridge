@@ -1,5 +1,5 @@
 {
-  "availability-zones:account=183804119221:region=us-east-1": [
+  "availability-zones:account=YOUR_ACCOUNT_ID:region=us-east-1": [
     "us-east-1a",
     "us-east-1b",
     "us-east-1c",

@@ -1,294 +1,258 @@
-# Multi-agent Collaboration (Customer Support Assistant)
+# Multi-Agent Orchestration on AWS
 
-### Table of Contents
-1. [Overview](#overview)
-2. [Key Objectives](#key-objectives)
-3. [Use Case: Intelligent Customer Support](#use-case-intelligent-customer-support)
-4. [Agents Involved](#agents-involved)
-5. [Runtime Chatbot](#runtime-chatbot)
-6. [Architecture Design](#architecture-design)
-7. [Demo Scope](#demo-scope)
-   - a. [Natural Language Inquiry Handling](#natural-language-inquiry-handling)
-   - b. [Order Tracking and Management](#order-tracking-and-management)
-   - c. [Personalized Product Recommendations](#personalized-product-recommendations)
-   - d. [Technical Issue Resolution](#technical-issue-resolution)
-   - e. [Persistent Customer Profile for Personalized Service](#persistent-customer-profile-for-personalized-service)
-   - f. [Dynamic Response and Tool Access](#dynamic-response-and-tool-access)
-   - g. [Seamless Multi-Agent Coordination and Orchestration](#seamless-multi-agent-coordination-and-orchestration)
-8. [Getting started](#getting-started)
-9. [Cost](#cost)
-10. [Model access](#model-access)
-11. [Pre-Requisites](#pre-requisites)
-12. [Setup](#setup)
-   - [Clone repo & install dependencies](#clone-repo--install-dependencies)
-   - [Bootstrapping Account](#bootstrapping-account)
-   - [Setup website](#setup-website)
-   - [Run webapp locally](#run-webapp-locally)
-   - [Deploy Webapp to Amazon Cloudfront](#deploy-webapp-to-amazon-cloudfront)
-13. [Cleanup](#cleanup)
+## Introduction
 
-## Overview  
-This project focuses on developing and implementing robust multi-agent collaboration capabilities for Amazon Bedrock Agents. The goal is to enhance the platform's ability to handle complex, real-world business scenarios that require coordinated efforts across specialized AI agents. Multiple agents will gather information from various datasources by using semantic search, and creating SQL queries from natural language to fetch data from databases. Click [here](https://aws.storylane.io/share/otdlltvd8jz7) if interested in an interactive click through demo. 
+This project implements a **multi-agent AI customer support system** using Amazon Bedrock Agents. The system uses a Supervisor Agent that receives every user message, analyzes the intent, and delegates to the most appropriate specialized sub-agent. Each sub-agent has access to specific data sources — either structured databases via SQL or unstructured document collections via semantic search.
 
-### Key Objectives
+The architecture is designed to be **channel-agnostic**: the same AI backend can respond through WhatsApp or through a web application, depending on how it is deployed. This is controlled by a single configuration flag, making it easy to start simple and expand later.
 
-- Develop a framework for efficient inter-agent communication
-- Implement task decomposition and delegation mechanisms
-- Ensure goal alignment across multiple agents
-- Address foundational issues such as latency reduction and stability improvements
-- Enhance usability to provide a solid base for multi-agent operations
+The system comes with two deployment modes:
 
-## Use Case: Intelligent Customer Support
+- **Mode 1 — WhatsApp only**: Deploy only the AI backend and connect it to WhatsApp via Meta Cloud API. No web frontend required. Ideal for companies that already have their own frontend, use WhatsApp as their primary support channel, or want to validate the AI before investing in a full web deployment.
 
-To demonstrate the capabilities of our multi-agent system, we've developed an intelligent customer support solution for a large retailer. This use case showcases how multiple specialized agents can collaborate to provide comprehensive, personalized support to customers.
+- **Mode 2 — Full stack**: Deploy everything in Mode 1 plus a complete web application with Cognito authentication, CloudFront CDN, WAF protection, and a real-time chat interface. Ideal for teams that want a ready-to-use web UI alongside WhatsApp, or for demos and internal testing.
 
-### Agents Involved
+Both modes share the same Bedrock agents, Knowledge Bases, Athena databases, and S3 data. The only difference is the frontend infrastructure.
 
-1. Supervisor Agent
-2. Order Management Agent
-3. Product Recommendation Agent
-4. Troubleshooting Agent
-5. Personalization Agent
+---
 
+## Agents
 
-## Runtime Chatbot
-The runtime chatbot is a React-based website that uses a WebSocket API and a Lambda function architecture. The Lambda function uses the Amazon Bedrock Converse API to reason and retrieve relevant documents from the knowledge base, and uses action groups for text-2-sql querying against an Amazon Athena database. Then, the app provides the final answer to users inquiring about products, troubleshooting, or purchase recommendations.
+The system has one Supervisor Agent and four specialized sub-agents:
 
+| Agent | Role | How it gets data |
+|---|---|---|
+| **Supervisor Agent** | Receives every message, identifies intent, delegates to the right sub-agent, and returns the final response | — |
+| **SA1 — Order Management** | Handles order status, tracking numbers, returns, and inventory queries | Executes SQL queries against Amazon Athena via Action Groups |
+| **SA2 — Product Recommendation** | Suggests products based on purchase history and customer preferences | Combines Athena SQL queries with semantic search over a Knowledge Base |
+| **SA3 — Troubleshooting** | Resolves technical issues and answers FAQs | Semantic search over a Knowledge Base with FAQ documents and product guides |
+| **SA4 — Personalization** | Retrieves and applies customer profile data for tailored responses | Combines Athena SQL queries with semantic search over a Knowledge Base |
 
-## Architecture Design
-![Diagram2](docs/kit/images/genai-mac-arch-diagram.png)
+**How the Supervisor decides which sub-agent to use:**
+The Supervisor Agent reads the user's message and matches it against the description of each sub-agent. For example, if the user asks "Where is my order?", the Supervisor routes to SA1. If they ask "What products do you recommend for me?", it routes to SA2. If multiple topics are involved, the Supervisor can call sub-agents sequentially and combine their responses.
 
+---
 
-1. The user accesses the web application through ***AWS WAF*** and ***Amazon CloudFront***, which delivers content from the Amazon S3 Website bucket, while Amazon Cognito handles authentication.
+## Deployment Modes
 
-2. After authentication, user requests are sent to ***AWS Amplify***, which serves as the entry point for all interactions. AWS Amplify validates the request and routes it to the appropriate ***AWS Lambda*** function for processing, maintaining a secure and scalable communication channel. ***Amazon DynamoDB*** is used to store session data. 
+Controlled by `config/project-config.json`:
 
-3. The ***AWS Lambda*** function processes the incoming request and communicates with the Amazon Bedrock Supervisor Agent (Main). 
+```json
+{
+  "features": {
+    "deployCognito": false,
+    "deployFrontend": false,
+    "deployWAF": false
+  }
+}
+```
 
-4. The ***Amazon Bedrock*** Supervisor Agent (Main) analyzes the user query to determine intent and routes it to the appropriate sub agent. This central orchestrator maintains context across the conversation and ensures requests are handled by the most suitable sub agent.
+| Flag | `false` | `true` |
+|---|---|---|
+| `deployCognito` | No Cognito, no DynamoDB, no WebSocket | Deploys Cognito User Pool, DynamoDB sessions, AppSync WebSocket |
+| `deployFrontend` | No web UI | Deploys S3 website bucket + CloudFront distribution |
+| `deployWAF` | No WAF | Deploys WAF Web ACL in front of CloudFront |
 
-4a. For order-related queries, the Order Management Agent retrieves data from the order management database in ***Amazon Athena***, accessing orders and inventory tables through its ***Action Groups*** that execute SQL queries and format structured responses about order status, shipping details, and inventory availability.
+---
 
-4b. When product recommendations are needed, this specialized agent accesses the product recommendation database in Athena while its Knowledge Base provides unstructured customer feedback data from S3, with Action Groups performing recommendation algorithms and formatting product suggestions with relevant details.
+## Mode 1 — WhatsApp only
 
-4c. For technical issues, the Troubleshooting Agent accesses its Knowledge Base containing FAQs and Troubleshooting Guide document collections, using vector search capabilities to match customer issues with relevant troubleshooting content and retrieve step-by-step solutions without requiring Action Groups.
+### Architecture
 
-4d. For personalization needs, the Personalization Agent accesses the personalization database in Athena, querying the customers preferences table through Action Groups that execute tailored SQL queries, perform preference analysis, and format responses. Its Knowledge Base contains browser history data from S3 that reveals actual customer behavior patterns, complementing the structured data to create a comprehensive view of individual customer profiles and past interactions.
+![Architecture Mode 1 - WhatsApp](docs/kit/images/Bridge.png)
 
-5. Sub agents construct and execute SQL queries against Amazon Athena which uses the AWS Glue Data Catalog to understand the schema and location of data, then queries the data directly in Amazon S3 without requiring data movement or transformation.
+### How it works
 
-6. After gathering necessary information from databases and knowledge bases, the sub agents generates a comprehensive response, which is then sent back through the Supervisor Agent to the Lambda function, AWS Amplify, and finally to the user's web interface.
+In this mode, the only entry point is the WhatsApp channel. There is no web application, no Cognito, and no DynamoDB. The infrastructure is minimal: API Gateway + Lambda + Bedrock Agents + Knowledge Bases + Athena.
 
+**Complete flow:**
 
+```
+1. User sends a WhatsApp message
+      ↓
+2. Meta Cloud API receives the message and forwards it via HTTP POST
+   to the API Gateway webhook URL
+      ↓
+3. API Gateway routes the POST /webhook request to the webhook-handler Lambda
+      ↓
+4. Lambda extracts the message text and the user's phone number,
+   then calls Bedrock InvokeAgent with:
+   - agentId: Supervisor Agent ID
+   - sessionId: user's phone number (enables conversation memory per user)
+   - inputText: the message text
+      ↓
+5. Bedrock Supervisor Agent analyzes the message and delegates:
+   - Order queries → SA1 (Order Management)
+   - Product questions → SA2 (Product Recommendation)
+   - Technical issues → SA3 (Troubleshooting)
+   - Profile/preferences → SA4 (Personalization)
+      ↓
+6. Sub-agent executes its Action Group or Knowledge Base query:
+   - SA1/SA2/SA4: Lambda calls Athena SQL query → Glue catalog → S3 data
+   - SA3: Bedrock searches the Knowledge Base (vector search over FAQ documents)
+      ↓
+7. Sub-agent returns the result to the Supervisor Agent
+      ↓
+8. Supervisor Agent composes the final response
+      ↓
+9. Lambda receives the response and calls Meta Graph API:
+   POST https://graph.facebook.com/v21.0/{phone_number_id}/messages
+      ↓
+10. User receives the response on WhatsApp
+```
 
-## Demo Scope
+### Real example
 
-1. **Natural Language Inquiry Handling**  
-   The Customer Intake Agent captures the customer’s inquiry in natural language, interprets the intent, and routes it to the appropriate specialized agent (e.g., Order Management, Product Recommendation, or Troubleshooting).
+> **User:** "Hi, I want to know where my order #45231 is"
+>
+> **Supervisor Agent:** Identifies intent = order tracking → delegates to SA1
+>
+> **SA1 (Order Management):** Generates SQL query:
+> `SELECT status, tracking_number, estimated_delivery FROM orders WHERE order_id = '45231'`
+> → Executes via Athena → Returns: `{status: "In transit", tracking: "DHL-789456", delivery: "Apr 25"}`
+>
+> **Supervisor Agent:** Composes response → Lambda → Meta API
+>
+> **User receives on WhatsApp:** "Your order #45231 is currently in transit with DHL. Tracking number: DHL-789456. Estimated delivery: April 25."
 
-2. **Order Tracking and Management**  
-   The Order Management Agent retrieves real-time order details, including tracking information, and processes requests for returns or exchanges. This agent responds to the user’s questions about their orders, providing quick resolutions.
+---
 
-3. **Personalized Product Recommendations**  
-   The Product Recommendation Agent analyzes customer purchase history, browsing patterns, and preferences to suggest relevant products tailored to the customer’s interests.
+## Mode 2 — Full stack
 
-4. **Technical Issue Resolution**  
-   The Troubleshooting Agent assists with diagnosing and resolving product-related issues by leveraging a knowledge base of common problems, troubleshooting guides, and customer support FAQs.
+### Architecture
 
-5. **Persistent Customer Profile for Personalized Service**  
-   The Personalization Agent maintains and updates a customer profile, allowing it to recall previous interactions and provide personalized responses across multiple support sessions.
+![Architecture Mode 2 - Full Stack](docs/kit/images/genai-mac-arch-diagram.png)
 
-6. **Dynamic Response and Tool Access**  
-   Agents dynamically select and access different tools and data sources, such as databases for order details, product catalogs, and survey data, ensuring comprehensive answers to customer inquiries.
+### How it works
 
-7. **Seamless Multi-Agent Coordination and Orchestration**  
-   The Orchestration Agent monitors agent progress, manages inter-agent communication, and ensures a seamless customer experience by coordinating the efforts of the Customer Intake, specialized, and Personalization agents.
+Mode 2 adds a complete web application on top of Mode 1. Users can access the system through a browser in addition to WhatsApp. Both channels use the same Bedrock agents — the only difference is how the message arrives and how the response is delivered.
 
+**Complete flow (web channel):**
 
-This demo scope showcases the multi-agent system’s ability to deliver an efficient, personalized, and user-friendly customer support experience. The setup leverages Bedrock's orchestration and data-handling capabilities to deliver comprehensive and real-time support solutions.
+```
+1. User opens the web app in their browser
+      ↓
+2. Traffic passes through AWS WAF (security filtering)
+   → CloudFront (CDN, global distribution)
+   → S3 Website Bucket (serves the React app)
+      ↓
+3. User logs in via Amazon Cognito (username/password or social login)
+      ↓
+4. User types a message in the chat interface
+      ↓
+5. AWS Amplify sends the message to the AppSync WebSocket API
+      ↓
+6. Lambda receives the message, stores the session in DynamoDB,
+   and calls Bedrock InvokeAgent (same as Mode 1)
+      ↓
+7. Bedrock Supervisor Agent → Sub-agents → Athena / Knowledge Bases
+   (identical to Mode 1 from this point)
+      ↓
+8. Lambda receives the response and publishes it to AppSync
+      ↓
+9. The browser receives the response in real time via WebSocket
+   and displays it in the chat interface
+```
 
+**WhatsApp channel in Mode 2:**
+The WhatsApp channel works exactly the same as in Mode 1. Both channels coexist — a user can interact via WhatsApp and another via the web app simultaneously, each with their own session.
 
+### Real example
 
-## Getting started
-Let's start by enabling the models we need for the application. Navigate to the Amazon Bedrock console, and enable the following models:
+> **User (web app):** "What products do you recommend for me based on my purchase history?"
+>
+> **Supervisor Agent:** Identifies intent = product recommendation → delegates to SA2
+>
+> **SA2 (Product Recommendation):**
+> 1. Queries Athena: `SELECT product_id, category FROM purchase_history WHERE customer_id = 'C-001' ORDER BY date DESC LIMIT 10`
+> 2. Searches Knowledge Base: finds customer feedback documents mentioning similar products
+> 3. Combines both results
+>
+> **Supervisor Agent:** Composes personalized response
+>
+> **User sees in the web chat:** "Based on your recent purchases in the electronics category, I recommend: [Product A] — highly rated by customers with similar profiles, [Product B] — frequently bought together with your last order."
+
+---
 
 ## Cost
-You are responsible for the cost of the AWS services used while running this Guidance. As of October 2024, the cost for running this Guidance with the default settings in the US West (Oregon) AWS Region is approximately $606.14 per month for processing 100,000 requests with an input/output token count average of 700K.
 
-We recommend creating a [Budget](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) through [AWS Cost Explorer](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/) to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this Guidance.
+All prices are **on-demand, US East (N. Virginia) — us-east-1**, sourced from official AWS pricing pages.
 
-| AWS Service                                           | Dimensions                                | Cost [USD]  |
-|-------------------------------------------------------|-------------------------------------------|-------------|
-| Amazon Cognito| Optimization Rate for Token Requests (0), Optimization Rate for App Clients (0), Number of monthly active users (MAU) (500), Advanced security features (Enabled)	| $25.00 |
-| AWS WAF	| Number of Web Access Control Lists (Web ACLs) utilized (1 per month), Number of Rules added per Web ACL (3 per month), Number of Rule Groups per Web ACL (2 per month), Number of Rules inside each Rule Group (2 per month)	| $14.00 |
-| Amazon CloudFront	| Data transfer out to internet (5 GB per month), Number of requests (HTTPS) (100000 per month), Data transfer out to origin (5 GB per month)	| $0.63 | 
-| AWS Amplify |	Duration of each request (in ms) (500), Number of build minutes (240 per day), Data stored per month (100 GB)	| $75.30 |
-| Amazon S3 | S3 Standard storage (10 GB per month), PUT, COPY, POST, LIST requests to S3 Standard (1000), GET, SELECT, and all other requests from S3 Standard (1000) |	$0.24 |
-| AWS Lambda |	Architecture (x86), Architecture (x86), Invoke Mode (Buffered), Amount of ephemeral storage allocated (512 MB), Number of requests (1 million per month)	| $0.00 |
-| Amazon DynamoDB |	Table class (Standard), Average item size (all attributes) (100 KB), Data storage size (10 GB)	| $3.15 |
-| Amazon Bedrock (Agents) |	Average of 1,000 tokens input and 500 tokens output per invocation, Using Claude 3 Sonnet model (3/1Minputtokens,15/1M output tokens)	| |
-| Supervisor Agent |	2,500 invocations/month	| $26.25 |
-| Order Management Agent	| 1,000 invocations/month |	$10.50 |
-| Product Recommendation Agent |	750 invocations/month	| $7.88 |
-| Trouble Shooting Agent |	500 invocations/month	| $5.25 |
-| Personalization Agent |	250 invocations/month	| $2.63 |
-| Agent Builder Service Fee	| 5 agents × 0.0025perrequest×5,000requests	| $62.50 |
-| Amazon Bedrock Knowledge Bases |	4 knowledge bases, 3 GB data each, 2,500 queries per month |	$507.48 | 
-| Amazon Bedrock Action Groups	| Included in Bedrock Agent pricing |	$0 |
-| Amazon Athena	| Amount of data scanned per query (1 GB), Total number of queries (100 per day)	| $14.85 |
-| AWS Glue |	Number of DPUs for Apache Spark job (12), Number of DPUs for Python Shell job (0.0625) |	$5.28 |
-|Total| | $760.94 |
+### Assumptions
 
-
-### Model access
-
-Navigate to the Amazon Bedrock console, and enable the following models: 
-`Amazon Nova Pro`
-`Amazon Nova Lite`
-`Amazon Nova Micro`
-`Amazon Titan Text Embeddings V2`
-
-> **Note:** The original repository listed 8 models including Claude and Cohere, but the code only uses these 4 Amazon models. No third-party models are required.
-
-## Pre-Requisites
-
-### Run Docker
-
-Because of restrictions of licensing on [Docker in Docker support](https://gitlab.pages.aws.dev/docs/Platform/gitlab-cicd.html#shared-runner-fleet), an alternative will need to be used. Success was found using [Rancher Desktop](https://rancherdesktop.io/), but you can use your Docker engine of choice. After install, you will need to allow the image `public.ecr.aws/sam/build-python3.12:latest` for the Python 3.12 build found on our official site [here](https://gallery.ecr.aws/sam/build-python3.12). 
-
-
-### AWS CLI
-
-Install `aws-cli` from [here](https://aws.amazon.com/cli/). Now, we need to configure our credentials.
-
-```bash
-aws configure
-AWS Access Key ID [**********************]: 
-AWS Secret Access Key [********************]:
-Default region name us-east-1
-Default output format: json
-
-```
+- **500 active users, 5 messages/day = 75,000 messages/month**
+- Each message triggers 2 agent invocations: Supervisor + 1 sub-agent
+- Per invocation: ~1,000 input tokens + 500 output tokens
+- ~25% of messages use Knowledge Base (SA3 — Troubleshooting)
+- 1 shared Aurora PostgreSQL Serverless v2 instance (0.5 ACU min) for all 4 Knowledge Bases
+- VPC uses 2 AZs → 2 NAT Gateways (1 per AZ, required for Aurora private subnets)
+- No separate Bedrock Agents invocation fee — only model token usage is charged
 
 ---
 
-## Setup
+### Calculator 1 — Mode 1: WhatsApp only (`deployCognito: false`)
 
+**What gets deployed:** 5 Bedrock Agents · 4 Knowledge Bases · Aurora pgvector · Lambda (action groups + webhook) · API Gateway · Athena + Glue · S3 · VPC + NAT Gateway · Secrets Manager · CloudWatch
 
-### Clone repo & install dependencies
-clone the repo from <https://github.com/aws-solutions-library-samples/guidance-for-multi-agent-orchestration-on-aws>
+| AWS Service | Unit Price | Monthly Usage | Monthly Cost |
+|---|---|---|---|
+| **Nova Pro** — Supervisor Agent | $0.24/1M in · $0.97/1M out | 75K × 1K in + 500 out tokens | 75M×$0.24 + 37.5M×$0.97 = **$54.38** |
+| **Nova Micro** — SA1 + SA3 | $0.035/1M in · $0.14/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.035 + 18.75M×$0.14 = **$3.94** |
+| **Nova Lite** — SA2 + SA4 | $0.06/1M in · $0.24/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.06 + 18.75M×$0.24 = **$6.75** |
+| **Titan Text Embeddings V2** — Knowledge Base queries | $0.02/1M tokens | ~18,750 KB queries × 500 tokens | **$0.19** |
+| **Aurora PostgreSQL Serverless v2** — shared vector store for all 4 KBs | $0.06/ACU-hour + $0.10/GB/month | 0.5 ACU × 720h + 5 GB storage | **$22.10** |
+| **AWS Lambda** — webhook handler + action group executor | $0.20/1M req + compute | 150K req × 2s × 512MB | **$3.00** |
+| **Amazon API Gateway** — WhatsApp webhook endpoint | $3.50/1M requests | 75,000 requests | **$0.26** |
+| **Amazon Athena** — SQL queries from SA1, SA2, SA4 | $5.00/TB scanned | ~56K queries × 10MB avg | **$2.80** |
+| **AWS Glue** — data catalog for Athena | $1.00/100K requests | catalog requests | **$0.10** |
+| **Amazon S3** — structured data + KB documents | $0.023/GB + requests | 5 GB storage + GET/PUT | **$1.50** |
+| **VPC + NAT Gateway** — required for Aurora (2 AZs, 1 NAT per AZ) | $0.045/h + $0.045/GB | 2 NAT GWs × 720h + 3 GB/month | **$65.07** |
+| **AWS Secrets Manager** — Aurora credentials | $0.40/secret/month | 1 secret + API calls | **$0.40** |
+| **Amazon CloudWatch** — logs + metrics | $0.30/GB ingested | 5 GB logs + metrics | **$5.00** |
+| **TOTAL** | | | **~$166/month** |
 
-```bash
-git clone https://github.com/aws-solutions-library-samples/guidance-for-multi-agent-orchestration-on-aws.git
-cd guidance-for-multi-agent-orchestration-on-aws
-```
-
-We are all set to install dependencies by using the following command. This will install `npm` dependencies required to run the app. Then, we will boostratp the account.
-
-```bash
-npm i
-```
-
-### Bootstrapping account
-
-```bash
-cdk bootstrap aws://{ACCOUNT_ID}/{REGION}
-```
-
-### Authenticate to ECR
-
-```bash
-aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
-```
-
-### Setup environment variables for Bedrock agents
-
-This application uses environment variables to manage Amazon Bedrock agent IDs securely, with values **dynamically exported from the CDK stack** during deployment. This approach eliminates hardcoded IDs in any source code or configuration files.
-
-#### For production deployments:
-The CDK stack automatically:
-1. Creates and configures the Bedrock agents
-2. Extracts the generated agent IDs and alias IDs
-3. Passes these as environment variables to the frontend build process
-4. Injects them into the application at build time
-
-#### For local development:
-After deploying the CDK stack, we can set up the environment:
-
-
-### Project Config
-
-The project configuration requires you to enter in your account number. This is configured in the config/[project-config.json](/config/project-config.json) file.
-
-Edit the variables -
-
-```ts
-    "accounts": {
-        "dev": {
-            "number": "{ACCOUNT_NUMBER}",
-            "region": "us-east-1"
-        }
-    }
-```
-
-### Setup website using the Starter kit
-
-Run this command to start the starter kit. 
-
-```bash
-npm run develop
-```
-
-![cli-welcome](./docs/kit/images/cli-welcome.png)
-
-
-This starter kit includes ready-to-deploy, compliant and secure CDK and React app components with Cognito integration. It also includes customizable CLI tooling for easier demo configuration and management. While we offer this set of components and tools, you retain the freedom to customize any and all aspects of the starter kit to fit your use case (even if it has nothing to do with GenAI).
-
-
-To deploy the stack, select the option - ***3. Deploy CDK Stack(s) 🚀***. Select environment, then yes, and let it deploy.
-
-Next, select the option ***5. Deploy Frontend 🖥️***. Let it finish deploying. 
-
-### Amazon Athena
-- Before we run the app, we need to manually set the Amazon Athena output bucket (This will be automated on the next revision). In the AWS console, search for the Amazon Athena service, then navigate to the Athena management console. Validate that the ***Query your data with Trino SQL*** radio button is selected, then press ***Launch query editor***.
-![athena1](docs/kit/images/athena1.png)
-
-
-- Next, set the ***query result location*** with Amazon S3. Select the ***Settings*** tab, then the ***Manage*** button in the ***Query result location and encryption*** section.
-![athena2](docs/kit/images/athena2.png)
-
-
-- Add the S3 prefix below for the query results location, then select the ***Save*** button.
-```bash
-s3://dev-mac-demo-backend-storageathenaresultsbucket-xxx
-```
-![athena3](docs/kit/images/athena3.png)
-
-
-You are now ready to log into the application for testing.
-
-
-### Run webapp locally
-
-The local site is configured to run on port `3000`. So, ensure there are no other apps running on that port.
-
-Select the option ***7. Test Frontend Locally 💻***.
-
-Now, visit <http://localhost:3000> on a browser of choice (Chrome/Firefox are recommended)
-
-If you receive a blank screen, refresh the page.
-
-You also have a the cloudfront url created in the terminal to access the application.
-
-![athena3](docs/kit/images/ui_image.png)
-
+<!-- PASTE AWS CALCULATOR SCREENSHOT OR LINK HERE — MODE 1 -->
 
 ---
 
+### Calculator 2 — Mode 2: Full stack (`deployCognito: true`)
 
-## Authors and acknowledgment
+**What gets deployed:** Everything in Mode 1 + Cognito · WAF · CloudFront · S3 website · AppSync WebSocket · DynamoDB · Amplify
 
-Show your appreciation to those who have contributed to the project.
+| AWS Service | Unit Price | Monthly Usage | Monthly Cost |
+|---|---|---|---|
+| **Nova Pro** — Supervisor Agent | $0.24/1M in · $0.97/1M out | 75K × 1K in + 500 out tokens | 75M×$0.24 + 37.5M×$0.97 = **$54.38** |
+| **Nova Micro** — SA1 + SA3 | $0.035/1M in · $0.14/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.035 + 18.75M×$0.14 = **$3.94** |
+| **Nova Lite** — SA2 + SA4 | $0.06/1M in · $0.24/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.06 + 18.75M×$0.24 = **$6.75** |
+| **Titan Text Embeddings V2** | $0.02/1M tokens | ~18,750 KB queries × 500 tokens | **$0.19** |
+| **Aurora PostgreSQL Serverless v2** | $0.06/ACU-hour + $0.10/GB/month | 0.5 ACU × 720h + 5 GB storage | **$22.10** |
+| **AWS Lambda** — webhook + action groups + AppSync resolvers | $0.20/1M req + compute | 200K req × 2s × 512MB | **$4.00** |
+| **Amazon API Gateway** — WhatsApp webhook | $3.50/1M requests | 75,000 requests | **$0.26** |
+| **Amazon Athena** | $5.00/TB scanned | ~56K queries × 10MB avg | **$2.80** |
+| **AWS Glue** | $1.00/100K requests | catalog requests | **$0.10** |
+| **Amazon S3** — data + KB docs + website bucket | $0.023/GB + requests | 6 GB storage + requests | **$2.00** |
+| **VPC + NAT Gateway** (2 AZs) | $0.045/h + $0.045/GB | 2 NAT GWs × 720h + 3 GB | 2×720×$0.045 + 3×$0.045 = **$65.07** |
+| **AWS Secrets Manager** | $0.40/secret/month | 1 secret | **$0.40** |
+| **Amazon CloudWatch** | $0.30/GB ingested | 6 GB logs + metrics | **$6.00** |
+| **Amazon Cognito** | Free up to 50K MAU/month | 500 MAU | **$0.00** |
+| **AWS WAF** | $5/WebACL + $1/rule/month | 1 WebACL + 3 rules | **$8.00** |
+| **Amazon CloudFront** | $0.0085/10K HTTPS req + $0.085/GB | 100K requests + 5 GB transfer | **$0.51** |
+| **Amazon DynamoDB** — chat sessions | $0.25/GB + $1.25/1M writes | 5 GB + 75K session writes | **$1.34** |
+| **AWS Amplify** | $0.01/build min | ~240 build min/mo | 240×$0.01 = **$2.40** |
+| **AWS AppSync** — WebSocket | $4.00/1M conn-min | 75K sessions × 2 min | 0.15M×$4 = **$0.60** |
+| **TOTAL** | | | **~$180/month** |
+
+> Cognito is free for the first 50,000 MAUs/month. At 500 users, there is no Cognito charge.
+
+<!-- PASTE AWS CALCULATOR SCREENSHOT OR LINK HERE — MODE 2 -->
+
+---
+
+## Documentation
+
+- [DEPLOYMENT.md](DEPLOYMENT.md) — Step-by-step deployment guide (prerequisites, both modes, troubleshooting, expected results)
+
+---
 
 ## License
 
