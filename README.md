@@ -67,39 +67,22 @@ In this mode, the only entry point is the WhatsApp channel. There is no web appl
 
 **Complete flow:**
 
-```
 1. User sends a WhatsApp message
-      ↓
-2. Meta Cloud API receives the message and forwards it via HTTP POST
-   to the API Gateway webhook URL
-      ↓
-3. API Gateway routes the POST /webhook request to the webhook-handler Lambda
-      ↓
-4. Lambda extracts the message text and the user's phone number,
-   then calls Bedrock InvokeAgent with:
-   - agentId: Supervisor Agent ID
-   - sessionId: user's phone number (enables conversation memory per user)
-   - inputText: the message text
-      ↓
-5. Bedrock Supervisor Agent analyzes the message and delegates:
+2. Meta Cloud API receives the message and forwards it via HTTP POST to the API Gateway webhook URL
+3. API Gateway routes the request to the webhook-handler Lambda
+4. Lambda extracts the message text and the user's phone number, then calls Bedrock InvokeAgent (sessionId = phone number, which enables conversation memory per user)
+5. Bedrock Supervisor Agent analyzes the message and delegates to the right sub-agent:
    - Order queries → SA1 (Order Management)
    - Product questions → SA2 (Product Recommendation)
    - Technical issues → SA3 (Troubleshooting)
    - Profile/preferences → SA4 (Personalization)
-      ↓
-6. Sub-agent executes its Action Group or Knowledge Base query:
-   - SA1/SA2/SA4: Lambda calls Athena SQL query → Glue catalog → S3 data
-   - SA3: Bedrock searches the Knowledge Base (vector search over FAQ documents)
-      ↓
+6. Sub-agent executes its query:
+   - SA1/SA2/SA4: runs a SQL query against Athena → Glue catalog → S3 data
+   - SA3: searches the Knowledge Base using vector search over FAQ documents
 7. Sub-agent returns the result to the Supervisor Agent
-      ↓
 8. Supervisor Agent composes the final response
-      ↓
-9. Lambda receives the response and calls Meta Graph API:
-   POST https://graph.facebook.com/v21.0/{phone_number_id}/messages
-      ↓
+9. Lambda sends the response back via Meta Graph API
 10. User receives the response on WhatsApp
-```
 
 ### Real example
 
@@ -129,30 +112,15 @@ Mode 2 adds a complete web application on top of Mode 1. Users can access the sy
 
 **Complete flow (web channel):**
 
-```
 1. User opens the web app in their browser
-      ↓
-2. Traffic passes through AWS WAF (security filtering)
-   → CloudFront (CDN, global distribution)
-   → S3 Website Bucket (serves the React app)
-      ↓
-3. User logs in via Amazon Cognito (username/password or social login)
-      ↓
+2. Traffic passes through AWS WAF (security filtering) → CloudFront (CDN) → S3 Website Bucket (serves the React app)
+3. User logs in via Amazon Cognito
 4. User types a message in the chat interface
-      ↓
 5. AWS Amplify sends the message to the AppSync WebSocket API
-      ↓
-6. Lambda receives the message, stores the session in DynamoDB,
-   and calls Bedrock InvokeAgent (same as Mode 1)
-      ↓
+6. Lambda receives the message, stores the session in DynamoDB, and calls Bedrock InvokeAgent (same flow as Mode 1 from this point)
 7. Bedrock Supervisor Agent → Sub-agents → Athena / Knowledge Bases
-   (identical to Mode 1 from this point)
-      ↓
 8. Lambda receives the response and publishes it to AppSync
-      ↓
-9. The browser receives the response in real time via WebSocket
-   and displays it in the chat interface
-```
+9. The browser receives the response in real time via WebSocket and displays it in the chat interface
 
 **WhatsApp channel in Mode 2:**
 The WhatsApp channel works exactly the same as in Mode 1. Both channels coexist — a user can interact via WhatsApp and another via the web app simultaneously, each with their own session.
