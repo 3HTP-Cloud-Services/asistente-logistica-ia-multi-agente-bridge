@@ -191,34 +191,36 @@ All prices are **on-demand, US East (N. Virginia) — us-east-1**, sourced from 
 
 ### Calculator 2 — Mode 2: Full stack (`deployCognito: true`)
 
-**What gets deployed:** Everything in Mode 1 + Cognito · WAF · CloudFront · S3 website · AppSync WebSocket · DynamoDB · Amplify
+**Deployed:** Everything in Mode 1 + Cognito · WAF (2 WebACLs) · CloudFront · S3 website · AppSync WebSocket · DynamoDB · Amplify
 
-| AWS Service | Unit Price | Monthly Usage | Monthly Cost |
-|---|---|---|---|
-| **Nova Pro** — Supervisor Agent | $0.24/1M in · $0.97/1M out | 75K × 1K in + 500 out tokens | 75M×$0.24 + 37.5M×$0.97 = **$54.38** |
-| **Nova Micro** — SA1 + SA3 | $0.035/1M in · $0.14/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.035 + 18.75M×$0.14 = **$3.94** |
-| **Nova Lite** — SA2 + SA4 | $0.06/1M in · $0.24/1M out | 37.5K × 1K in + 500 out | 37.5M×$0.06 + 18.75M×$0.24 = **$6.75** |
-| **Titan Text Embeddings V2** | $0.02/1M tokens | ~18,750 KB queries × 500 tokens | **$0.19** |
-| **Aurora PostgreSQL Serverless v2** | $0.06/ACU-hour + $0.10/GB/month | 0.5 ACU × 720h + 5 GB storage | **$22.10** |
-| **AWS Lambda** — webhook + action groups + AppSync resolvers | $0.20/1M req + compute | 200K req × 2s × 512MB | **$4.00** |
-| **Amazon API Gateway** — WhatsApp webhook | $3.50/1M requests | 75,000 requests | **$0.26** |
-| **Amazon Athena** | $5.00/TB scanned | ~56K queries × 10MB avg | **$2.80** |
-| **AWS Glue** | $1.00/100K requests | catalog requests | **$0.10** |
-| **Amazon S3** — data + KB docs + website bucket | $0.023/GB + requests | 6 GB storage + requests | **$2.00** |
-| **VPC + NAT Gateway** (2 AZs) | $0.045/h + $0.045/GB | 2 NAT GWs × 720h + 3 GB | 2×720×$0.045 + 3×$0.045 = **$65.07** |
-| **AWS Secrets Manager** | $0.40/secret/month | 1 secret | **$0.40** |
-| **Amazon CloudWatch** | $0.30/GB ingested | 6 GB logs + metrics | **$6.00** |
-| **Amazon Cognito** | Free up to 50K MAU/month | 500 MAU | **$0.00** |
-| **AWS WAF** | $5/WebACL + $1/rule/month | 1 WebACL + 3 rules | **$8.00** |
-| **Amazon CloudFront** | $0.0085/10K HTTPS req + $0.085/GB | 100K requests + 5 GB transfer | **$0.51** |
-| **Amazon DynamoDB** — chat sessions | $0.25/GB + $1.25/1M writes | 5 GB + 75K session writes | **$1.34** |
-| **AWS Amplify** | $0.01/build min | ~240 build min/mo | 240×$0.01 = **$2.40** |
-| **AWS AppSync** — WebSocket | $4.00/1M conn-min | 75K sessions × 2 min | 0.15M×$4 = **$0.60** |
-| **TOTAL** | | | **~$180/month** |
+**Assumptions:** Same as Mode 1 + 500 users accessing the web app · 75K chat sessions/month · 2 min average session duration
 
-> Cognito is free for the first 50,000 MAUs/month. At 500 users, there is no Cognito charge.
+| AWS Service | Monthly Cost |
+|---|---|
+| Amazon Bedrock — Nova Pro (Supervisor Agent, cross-region inference) | $207.36 |
+| Amazon Bedrock — Nova Micro (SA1 Order Mgmt + SA3 Troubleshooting) | $4.54 |
+| Amazon Bedrock — Nova Lite (SA2 Product Rec + SA4 Personalization) | $7.78 |
+| Amazon Bedrock — Titan Text Embeddings V2 (Knowledge Bases) | $0.19 |
+| Amazon Aurora PostgreSQL Serverless v2 (vector store for all 4 KBs) | $49.27 |
+| AWS Lambda (webhook handler + action group executor) | $0.01 |
+| Amazon API Gateway (WhatsApp webhook endpoint) | $0.24 |
+| Amazon S3 (KB documents + structured data CSVs) | $0.09 |
+| Amazon VPC + NAT Gateway (2 AZs, required for Aurora) | $65.74 |
+| AWS Secrets Manager (Aurora credentials) | $0.41 |
+| Amazon CloudWatch (logs + metrics) | $8.53 |
+| Amazon Athena (SQL queries from SA1, SA2, SA4) | $2.67 |
+| AWS Glue (data catalog for Athena) | $0.06 |
+| AWS WAF (2 WebACLs: AppSync + CloudFront) | $20.10 |
+| Amazon CloudFront (CDN for React frontend) | $0.53 |
+| Amazon DynamoDB (chat session storage) | $1.31 |
+| AWS AppSync (WebSocket real-time chat) | $0.46 |
+| Amazon Cognito (user authentication — within free tier) | $0.00 |
+| AWS Amplify (frontend build + hosting) | $2.47 |
+| **TOTAL** | **~$371.76/month** |
 
-<!-- PASTE AWS CALCULATOR SCREENSHOT OR LINK HERE — MODE 2 -->
+> Full estimate: https://calculator.aws/#/estimate?id=a91059fc531b6bf31428d20a42a318742157b3d7
+
+<!-- PASTE AWS CALCULATOR SCREENSHOT HERE — MODE 2 -->
 
 ---
 
