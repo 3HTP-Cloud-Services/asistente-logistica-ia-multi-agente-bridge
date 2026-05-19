@@ -5,31 +5,29 @@ import {
     AgentAlias,
     AgentCollaborator,
     BedrockFoundationModel,
-    ChunkingStrategy,
     CrossRegionInferenceProfile,
     CrossRegionInferenceProfileRegion,
     InlineApiSchema,
-    S3DataSource,
-    VectorKnowledgeBase,
 } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/bedrock";
 import { Duration } from "aws-cdk-lib";
+import * as bedrock from "aws-cdk-lib/aws-bedrock";
 import { Rule } from "aws-cdk-lib/aws-events";
 import { AwsApi } from "aws-cdk-lib/aws-events-targets";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Function } from "aws-cdk-lib/aws-lambda";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
+import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { readFileSync } from "fs";
 import * as path from "path";
-import { AmazonAuroraVectorStore } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/amazonaurora";
 import { CommonBucket } from "../../../../common/constructs/s3";
 import { KnowledgeBaseSyncChecker } from "../kb-sync-checker/construct";
+import { S3VectorsKnowledgeBase } from "../s3-vectors-knowledge-base";
 
 interface PersonalizationSubAgentProps {
     loggingBucket: Bucket;
     executorFunction: Function;
-    auroraVectorStore: AmazonAuroraVectorStore;
 }
 
 export class PersonalizationSubAgent extends Construct {
@@ -41,18 +39,14 @@ export class PersonalizationSubAgent extends Construct {
     constructor(scope: Construct, id: string, props: PersonalizationSubAgentProps) {
         super(scope, id);
 
-        const { loggingBucket, executorFunction, auroraVectorStore } = props;
+        const { loggingBucket, executorFunction } = props;
 
-        const personalizationKnowledgeBase = new VectorKnowledgeBase(
-            this,
-            "personalizationKnowledgeBase",
-            {
-                embeddingsModel: BedrockFoundationModel.TITAN_EMBED_TEXT_V2_1024,
-                instruction:
-                    "Use this knowledge base to retrieve user preferences and browsing history.",
-                vectorStore: auroraVectorStore,
-            }
-        );
+        // OPTIMIZACIÓN: Knowledge Base con S3 Vectors (sin Aurora, sin VPC, sin NAT Gateways)
+        // Ahorro: ~$115/mes en infraestructura fija
+        const personalizationKB = new S3VectorsKnowledgeBase(this, "personalizationKB", {
+            name: "personalization-kb",
+            instruction: "Use this knowledge base to retrieve user preferences and browsing history.",
+        });
 
         const personalizationKnowledgeBucket = new CommonBucket(
             this,
@@ -62,15 +56,24 @@ export class PersonalizationSubAgent extends Construct {
             }
         );
 
-        const personalizationKnowledgeSource = new S3DataSource(
+        // Crear Data Source usando L1 (CfnDataSource)
+        const personalizationDataSource = new bedrock.CfnDataSource(
             this,
-            "personalizationKnowledgeSource",
+            "personalizationDataSource",
             {
-                bucket: personalizationKnowledgeBucket,
-                knowledgeBase: personalizationKnowledgeBase,
-                dataSourceName: "personalization-data"
+                knowledgeBaseId: personalizationKB.knowledgeBaseId,
+                name: "personalization-data",
+                dataSourceConfiguration: {
+                    type: "S3",
+                    s3Configuration: {
+                        bucketArn: personalizationKnowledgeBucket.bucketArn,
+                    },
+                },
             }
         );
+
+        // Dar permisos al role de la KB para leer del bucket S3
+        personalizationKnowledgeBucket.grantRead(personalizationKB.role);
 
         const personalizationIngestionRule = new Rule(this, "personalizationIngestionRule", {
             eventPattern: {
@@ -86,14 +89,14 @@ export class PersonalizationSubAgent extends Construct {
                     service: "bedrock-agent",
                     action: "startIngestionJob",
                     parameters: {
-                        knowledgeBaseId: personalizationKnowledgeBase.knowledgeBaseId,
-                        dataSourceId: personalizationKnowledgeSource.dataSourceId,
+                        knowledgeBaseId: personalizationKB.knowledgeBaseId,
+                        dataSourceId: personalizationDataSource.attrDataSourceId,
                     },
                 }),
             ],
         });
 
-        // Create knowledge base deployment with explicit sync
+        // Deploy knowledge base documents
         const personalizationKnowledgeDeployment = new BucketDeployment(
             this,
             "personalizationKnowledgeDeployment",
@@ -101,41 +104,16 @@ export class PersonalizationSubAgent extends Construct {
                 sources: [Source.asset(path.join(__dirname, "knowledge-base"))],
                 destinationBucket: personalizationKnowledgeBucket,
                 exclude: [".DS_Store"],
-                prune: true
+                prune: true,
             }
         );
-
-        // Add dependency to ensure rule is created first
         personalizationKnowledgeDeployment.node.addDependency(personalizationIngestionRule);
 
-        // Add explicit ingestion job after deployment completes
-        const personalizationInitialIngestion = new Rule(this, "personalizationInitialIngestion", {
-            eventPattern: {
-                source: ["aws.cloudformation"],
-                detailType: ["CloudFormation Resource Status Change"],
-                detail: {
-                    resourceType: ["AWS::S3::BucketDeployment"],
-                    resourceStatus: ["CREATE_COMPLETE", "UPDATE_COMPLETE"],
-                    logicalResourceId: [personalizationKnowledgeDeployment.node.id]
-                }
-            },
-            targets: [
-                new AwsApi({
-                    service: "bedrock-agent",
-                    action: "startIngestionJob",
-                    parameters: {
-                        knowledgeBaseId: personalizationKnowledgeBase.knowledgeBaseId,
-                        dataSourceId: personalizationKnowledgeSource.dataSourceId,
-                    },
-                }),
-            ],
-        });
-
-        // Create a knowledge base sync checker to ensure data is synchronized
+        // Sync checker
         const personalizationSyncChecker = new KnowledgeBaseSyncChecker(this, "personalizationSyncChecker", {
-            knowledgeBaseIds: [personalizationKnowledgeBase.knowledgeBaseId],
+            knowledgeBaseIds: [personalizationKB.knowledgeBaseId],
             serviceName: "personalization-kb-sync-checker",
-            checkIntervalHours: 24
+            checkIntervalHours: 24,
         });
 
         const personalizationActionGroup = new AgentActionGroup({
@@ -154,16 +132,50 @@ export class PersonalizationSubAgent extends Construct {
             model: model,
         });
 
+        // Crear agente SIN knowledgeBases (se asocia después con L1)
         const personalizationAgent = new Agent(this, "personalizationAgent", {
-            //name: "PersonalizationAgent-" + Date.now(), 
             foundationModel: personalizationInferenceProfile,
             instruction: readFileSync(path.join(__dirname, "instructions.txt"), "utf-8"),
-            knowledgeBases: [personalizationKnowledgeBase],
             actionGroups: [personalizationActionGroup],
             userInputEnabled: true,
             shouldPrepareAgent: true,
             idleSessionTTL: Duration.seconds(1800),
         });
+
+        // Asociar Knowledge Base al agente usando Custom Resource (API call)
+        new AwsCustomResource(this, "personalizationKBAssociation", {
+            onCreate: {
+                service: "BedrockAgent",
+                action: "associateAgentKnowledgeBase",
+                parameters: {
+                    agentId: personalizationAgent.agentId,
+                    agentVersion: "DRAFT",
+                    knowledgeBaseId: personalizationKB.knowledgeBaseId,
+                    description: "Use this knowledge base to retrieve user preferences and browsing history.",
+                    knowledgeBaseState: "ENABLED",
+                },
+                physicalResourceId: PhysicalResourceId.of(`personalization-kb-assoc-${Date.now()}`),
+            },
+            onDelete: {
+                service: "BedrockAgent",
+                action: "disassociateAgentKnowledgeBase",
+                parameters: {
+                    agentId: personalizationAgent.agentId,
+                    agentVersion: "DRAFT",
+                    knowledgeBaseId: personalizationKB.knowledgeBaseId,
+                },
+            },
+            policy: AwsCustomResourcePolicy.fromStatements([
+                new PolicyStatement({
+                    actions: [
+                        "bedrock:AssociateAgentKnowledgeBase",
+                        "bedrock:DisassociateAgentKnowledgeBase",
+                    ],
+                    resources: ["*"],
+                }),
+            ]),
+        });
+
         personalizationAgent.role.addToPrincipalPolicy(
             new PolicyStatement({
                 effect: Effect.ALLOW,
@@ -172,12 +184,12 @@ export class PersonalizationSubAgent extends Construct {
                     "bedrock:InvokeModelWithResponseStream",
                     "bedrock:GetInferenceProfile",
                     "bedrock:GetFoundationModel",
-                    "bedrock:Retrieve", // Add permission to retrieve from knowledge base
+                    "bedrock:Retrieve",
                 ],
                 resources: [
                     `arn:aws:bedrock:*::foundation-model/${model.modelId}`,
                     personalizationInferenceProfile.inferenceProfileArn,
-                    personalizationKnowledgeBase.knowledgeBaseArn, // Add knowledge base ARN
+                    personalizationKB.knowledgeBaseArn,
                 ],
             })
         );
@@ -194,7 +206,7 @@ export class PersonalizationSubAgent extends Construct {
         });
 
         this.agentCollaborator = personalizationAgentCollaborator;
-        this.knowledgeBaseId = personalizationKnowledgeBase.knowledgeBaseId;
+        this.knowledgeBaseId = personalizationKB.knowledgeBaseId;
         this.agent = personalizationAgent;
         this.agentAlias = personalizationAgentAlias;
     }

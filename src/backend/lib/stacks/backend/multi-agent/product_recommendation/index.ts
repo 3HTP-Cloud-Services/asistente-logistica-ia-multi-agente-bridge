@@ -5,31 +5,29 @@ import {
     AgentAlias,
     AgentCollaborator,
     BedrockFoundationModel,
-    ChunkingStrategy,
     CrossRegionInferenceProfile,
     CrossRegionInferenceProfileRegion,
     InlineApiSchema,
-    S3DataSource,
-    VectorKnowledgeBase,
 } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/bedrock";
 import { Duration } from "aws-cdk-lib";
+import * as bedrock from "aws-cdk-lib/aws-bedrock";
 import { Rule } from "aws-cdk-lib/aws-events";
 import { AwsApi } from "aws-cdk-lib/aws-events-targets";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Function } from "aws-cdk-lib/aws-lambda";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
+import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { readFileSync } from "fs";
 import * as path from "path";
-import { AmazonAuroraVectorStore } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/amazonaurora";
 import { CommonBucket } from "../../../../common/constructs/s3";
 import { KnowledgeBaseSyncChecker } from "../kb-sync-checker/construct";
+import { S3VectorsKnowledgeBase } from "../s3-vectors-knowledge-base";
 
 interface ProductRecommendationSubAgentProps {
     loggingBucket: Bucket;
     executorFunction: Function;
-    auroraVectorStore: AmazonAuroraVectorStore;
 }
 
 export class ProductRecommendationSubAgent extends Construct {
@@ -41,18 +39,13 @@ export class ProductRecommendationSubAgent extends Construct {
     constructor(scope: Construct, id: string, props: ProductRecommendationSubAgentProps) {
         super(scope, id);
 
-        const { loggingBucket, executorFunction, auroraVectorStore } = props;
+        const { loggingBucket, executorFunction } = props;
 
-        const productRecommendationKnowledgeBase = new VectorKnowledgeBase(
-            this,
-            "productRecommendationKnowledgeBase",
-            {
-                embeddingsModel: BedrockFoundationModel.TITAN_EMBED_TEXT_V2_1024,
-                instruction:
-                    "Use this knowledge base to retrieve user preferences and browsing history.",
-                vectorStore: auroraVectorStore,
-            }
-        );
+        // OPTIMIZACIÓN: Knowledge Base con S3 Vectors (sin Aurora, sin VPC, sin NAT Gateways)
+        const productRecommendationKB = new S3VectorsKnowledgeBase(this, "productRecKB", {
+            name: "product-recommendation-kb",
+            instruction: "Use this knowledge base to retrieve product information and recommendations.",
+        });
 
         const productRecommendationKnowledgeBucket = new CommonBucket(
             this,
@@ -62,15 +55,24 @@ export class ProductRecommendationSubAgent extends Construct {
             }
         );
 
-        const productRecommendationKnowledgeSource = new S3DataSource(
+        // Crear Data Source usando L1
+        const productRecDataSource = new bedrock.CfnDataSource(
             this,
-            "productRecommendationKnowledgeSource",
+            "productRecDataSource",
             {
-                bucket: productRecommendationKnowledgeBucket,
-                knowledgeBase: productRecommendationKnowledgeBase,
-                dataSourceName: "productRecommendation-data"
+                knowledgeBaseId: productRecommendationKB.knowledgeBaseId,
+                name: "productRecommendation-data",
+                dataSourceConfiguration: {
+                    type: "S3",
+                    s3Configuration: {
+                        bucketArn: productRecommendationKnowledgeBucket.bucketArn,
+                    },
+                },
             }
         );
+
+        // Dar permisos al role de la KB para leer del bucket S3
+        productRecommendationKnowledgeBucket.grantRead(productRecommendationKB.role);
 
         const productRecommendationIngestionRule = new Rule(
             this,
@@ -89,15 +91,15 @@ export class ProductRecommendationSubAgent extends Construct {
                         service: "bedrock-agent",
                         action: "startIngestionJob",
                         parameters: {
-                            knowledgeBaseId: productRecommendationKnowledgeBase.knowledgeBaseId,
-                            dataSourceId: productRecommendationKnowledgeSource.dataSourceId,
+                            knowledgeBaseId: productRecommendationKB.knowledgeBaseId,
+                            dataSourceId: productRecDataSource.attrDataSourceId,
                         },
                     }),
                 ],
             }
         );
 
-        // Create knowledge base deployment with explicit sync
+        // Deploy knowledge base documents
         const productRecommendationKnowledgeDeployment = new BucketDeployment(
             this,
             "productRecommendationKnowledgeDeployment",
@@ -105,43 +107,18 @@ export class ProductRecommendationSubAgent extends Construct {
                 sources: [Source.asset(path.join(__dirname, "knowledge-base"))],
                 destinationBucket: productRecommendationKnowledgeBucket,
                 exclude: [".DS_Store"],
-                prune: true
+                prune: true,
             }
         );
-
-        // Add dependency to ensure rule is created first
         productRecommendationKnowledgeDeployment.node.addDependency(
             productRecommendationIngestionRule
         );
 
-        // Add explicit ingestion job after deployment completes
-        const productRecommendationInitialIngestion = new Rule(this, "productRecommendationInitialIngestion", {
-            eventPattern: {
-                source: ["aws.cloudformation"],
-                detailType: ["CloudFormation Resource Status Change"],
-                detail: {
-                    resourceType: ["AWS::S3::BucketDeployment"],
-                    resourceStatus: ["CREATE_COMPLETE", "UPDATE_COMPLETE"],
-                    logicalResourceId: [productRecommendationKnowledgeDeployment.node.id]
-                }
-            },
-            targets: [
-                new AwsApi({
-                    service: "bedrock-agent",
-                    action: "startIngestionJob",
-                    parameters: {
-                        knowledgeBaseId: productRecommendationKnowledgeBase.knowledgeBaseId,
-                        dataSourceId: productRecommendationKnowledgeSource.dataSourceId,
-                    },
-                }),
-            ],
-        });
-
-        // Create a knowledge base sync checker to ensure data is synchronized
+        // Sync checker
         const productRecommendationSyncChecker = new KnowledgeBaseSyncChecker(this, "productRecommendationSyncChecker", {
-            knowledgeBaseIds: [productRecommendationKnowledgeBase.knowledgeBaseId],
+            knowledgeBaseIds: [productRecommendationKB.knowledgeBaseId],
             serviceName: "product-recommendation-kb-sync-checker",
-            checkIntervalHours: 24
+            checkIntervalHours: 24,
         });
 
         const productRecommendationActionGroup = new AgentActionGroup({
@@ -160,16 +137,50 @@ export class ProductRecommendationSubAgent extends Construct {
             model: model,
         });
 
+        // Crear agente SIN knowledgeBases (se asocia después con L1)
         const productRecommendationAgent = new Agent(this, "productRecommendationAgent", {
-            //name: "ProductRecommendationAgent-" + Date.now(), 
             foundationModel: productRecommendationInferenceProfile,
             instruction: readFileSync(path.join(__dirname, "instructions.txt"), "utf-8"),
-            knowledgeBases: [productRecommendationKnowledgeBase],
             actionGroups: [productRecommendationActionGroup],
             userInputEnabled: true,
             shouldPrepareAgent: true,
             idleSessionTTL: Duration.seconds(1800),
         });
+
+        // Asociar Knowledge Base al agente usando Custom Resource (API call)
+        new AwsCustomResource(this, "productRecKBAssociation", {
+            onCreate: {
+                service: "BedrockAgent",
+                action: "associateAgentKnowledgeBase",
+                parameters: {
+                    agentId: productRecommendationAgent.agentId,
+                    agentVersion: "DRAFT",
+                    knowledgeBaseId: productRecommendationKB.knowledgeBaseId,
+                    description: "Use this knowledge base to retrieve product information and recommendations.",
+                    knowledgeBaseState: "ENABLED",
+                },
+                physicalResourceId: PhysicalResourceId.of(`product-rec-kb-assoc-${Date.now()}`),
+            },
+            onDelete: {
+                service: "BedrockAgent",
+                action: "disassociateAgentKnowledgeBase",
+                parameters: {
+                    agentId: productRecommendationAgent.agentId,
+                    agentVersion: "DRAFT",
+                    knowledgeBaseId: productRecommendationKB.knowledgeBaseId,
+                },
+            },
+            policy: AwsCustomResourcePolicy.fromStatements([
+                new PolicyStatement({
+                    actions: [
+                        "bedrock:AssociateAgentKnowledgeBase",
+                        "bedrock:DisassociateAgentKnowledgeBase",
+                    ],
+                    resources: ["*"],
+                }),
+            ]),
+        });
+
         productRecommendationAgent.role.addToPrincipalPolicy(
             new PolicyStatement({
                 effect: Effect.ALLOW,
@@ -178,23 +189,19 @@ export class ProductRecommendationSubAgent extends Construct {
                     "bedrock:InvokeModelWithResponseStream",
                     "bedrock:GetInferenceProfile",
                     "bedrock:GetFoundationModel",
-                    "bedrock:Retrieve", // Add permission to retrieve from knowledge base
+                    "bedrock:Retrieve",
                 ],
                 resources: [
                     `arn:aws:bedrock:*::foundation-model/${model.modelId}`,
                     productRecommendationInferenceProfile.inferenceProfileArn,
-                    productRecommendationKnowledgeBase.knowledgeBaseArn, // Add knowledge base ARN
+                    productRecommendationKB.knowledgeBaseArn,
                 ],
             })
         );
 
-        const productRecommendationAgentAlias = new AgentAlias(
-            this,
-            "alias",
-            {
-                agent: productRecommendationAgent,
-            }
-        );
+        const productRecommendationAgentAlias = new AgentAlias(this, "alias", {
+            agent: productRecommendationAgent,
+        });
 
         const productRecommendationAgentCollaborator = new AgentCollaborator({
             agentAlias: productRecommendationAgentAlias,
@@ -204,7 +211,7 @@ export class ProductRecommendationSubAgent extends Construct {
         });
 
         this.agentCollaborator = productRecommendationAgentCollaborator;
-        this.knowledgeBaseId = productRecommendationKnowledgeBase.knowledgeBaseId;
+        this.knowledgeBaseId = productRecommendationKB.knowledgeBaseId;
         this.agent = productRecommendationAgent;
         this.agentAlias = productRecommendationAgentAlias;
     }

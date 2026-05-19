@@ -26,8 +26,8 @@
     },
     "dependencies": {
         "@aws-amplify/data-construct": "^1.15.1",
-        "@aws-cdk/aws-glue-alpha": "^2.193.0-alpha.0",
-        "@aws-cdk/aws-lambda-python-alpha": "^2.187.0-alpha.0",
+        "@aws-cdk/aws-glue-alpha": "^2.243.0-alpha.0",
+        "@aws-cdk/aws-lambda-python-alpha": "^2.243.0-alpha.0",
         "@aws-sdk/client-bedrock-runtime": "^3.772.0",
         "@aws-sdk/client-bedrock-agent-runtime": "^3.772.0",
         "@aws-sdk/client-codebuild": "^3.772.0",
@@ -36,7 +36,7 @@
         "@aws/pdk": "^0.26.2",
         "@cdklabs/generative-ai-cdk-constructs": "^0.1.298",
         "aws-appsync": "^4.1.10",
-        "aws-cdk-lib": "^2.187.0",
+        "aws-cdk-lib": "^2.243.0",
         "cdk-nag": "^2.35.51",
         "constructs": "^10.4.2",
         "graphql-tag": "^2.12.6"

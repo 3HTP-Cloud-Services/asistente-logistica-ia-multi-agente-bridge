@@ -1,5 +1,5 @@
 {
-    "projectId": "mac-demo",
+    "projectId": "kroni-bridge",
     "gitlabGroup": "genai-labs/demo-assets",
     "gitlabProject": "multiagent-collaboration",
     "codeArtifact": false,
@@ -12,7 +12,7 @@
     },
     "accounts": {
         "dev": {
-            "number": "ACCOUNT_ID_AQUI",
+            "number": "REPLACE_WITH_YOUR_ACCOUNT_ID",
             "region": "us-east-1"
         }
     }

@@ -66,7 +66,7 @@ export class StreamingApi extends Construct {
         );
 
         amplifiedGraphApi.resources.cfnResources.cfnGraphqlApi.xrayEnabled = true;
-        Object.values(amplifiedGraphApi.resources.cfnResources.cfnTables).forEach((table) => {
+        Object.values(amplifiedGraphApi.resources.cfnResources.cfnTables).forEach((table: any) => {
             table.pointInTimeRecoverySpecification = {
                 pointInTimeRecoveryEnabled: true,
             };

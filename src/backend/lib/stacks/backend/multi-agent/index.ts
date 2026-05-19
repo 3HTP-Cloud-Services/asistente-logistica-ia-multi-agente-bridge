@@ -6,9 +6,7 @@ import {
     CrossRegionInferenceProfile,
     CrossRegionInferenceProfileRegion,
 } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/bedrock";
-import { AmazonAuroraVectorStore } from "@cdklabs/generative-ai-cdk-constructs/lib/cdk-lib/amazonaurora";
-import { AuroraPostgresEngineVersion } from "aws-cdk-lib/aws-rds";
-import { Duration, CustomResource, Stack } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from "aws-cdk-lib/custom-resources";
@@ -42,12 +40,13 @@ export class MultiAgent extends Construct {
 
         const loggingBucket = new CommonBucket(this, "loggingBucket", {});
 
-        // Aurora PostgreSQL compartido para todas las Knowledge Bases
-        // Reemplaza OpenSearch Serverless (~$700/mes por colección) por Aurora Serverless v2 (~$43/mes total)
-        const auroraVectorStore = new AmazonAuroraVectorStore(this, "auroraVectorStore", {
-            embeddingsModelVectorDimension: 1024, // Titan Embed Text V2 usa 1024 dimensiones
-            postgreSQLVersion: AuroraPostgresEngineVersion.VER_15_8,
-        });
+        // ============================================================
+        // OPTIMIZACIÓN DE COSTOS: Se eliminó Aurora PostgreSQL + VPC + NAT Gateways
+        // Antes: AmazonAuroraVectorStore creaba Aurora Serverless v2 (~$49/mes) + VPC con 2 NAT Gateways (~$66/mes)
+        // Ahora: Cada Knowledge Base usa OpenSearch Serverless creado automáticamente por el construct
+        //        (sin costo fijo cuando se usa "Quick create" a través de Bedrock)
+        // Ahorro: ~$115/mes en infraestructura fija
+        // ============================================================
 
         const executorFunction = new CommonPythonPowertoolsFunction(this, "executorFunction", {
             entry: path.join(__dirname, "action-group", "executor-function"),
@@ -81,7 +80,6 @@ export class MultiAgent extends Construct {
             {
                 loggingBucket,
                 executorFunction,
-                auroraVectorStore,
             }
         );
 
@@ -99,13 +97,11 @@ export class MultiAgent extends Construct {
             {
                 loggingBucket,
                 executorFunction,
-                auroraVectorStore,
             }
         );
 
         const troubleshootSubAgent = new TroubleshootSubAgent(this, "troubleshootSubAgent", {
             loggingBucket,
-            auroraVectorStore,
         });
         
         // Extract the bucket deployments from each subagent to use as dependencies later
@@ -189,8 +185,10 @@ export class MultiAgent extends Construct {
         const currentRegion = Stack.of(this).region;
         console.log(`Deploying in region: ${currentRegion}`);
         
-        // Define the models we might use
-        const novaProModel = BedrockFoundationModel.AMAZON_NOVA_PRO_V1;
+        // OPTIMIZACIÓN: Supervisor usa Nova Lite en vez de Nova Pro
+        // Nova Lite es 13x más barato y suficiente para routing de intenciones a 4 sub-agentes
+        // Si se necesita razonamiento más complejo, cambiar a AMAZON_NOVA_PRO_V1
+        const supervisorModel = BedrockFoundationModel.AMAZON_NOVA_LITE_V1;
         
         let supervisorAgent: Agent;
         
@@ -200,7 +198,7 @@ export class MultiAgent extends Construct {
             // Create supervisor agent with direct model reference (no cross-region profile)
             supervisorAgent = new Agent(this, "supervisorAgent", {
                 //name: "SupervisorAgent-" + Date.now(),            
-                foundationModel: novaProModel,
+                foundationModel: supervisorModel,
                 instruction: readFileSync(path.join(__dirname, "instructions.txt"), "utf-8"),
                 agentCollaboration: AgentCollaboratorType.SUPERVISOR,
                 agentCollaborators: [
@@ -221,7 +219,7 @@ export class MultiAgent extends Construct {
                         "bedrock:GetFoundationModel",
                     ],
                     resources: [
-                        `arn:aws:bedrock:${currentRegion}::foundation-model/${novaProModel.modelId}`,
+                        `arn:aws:bedrock:${currentRegion}::foundation-model/${supervisorModel.modelId}`,
                     ],
                 })
             );
@@ -231,8 +229,7 @@ export class MultiAgent extends Construct {
             // For other regions, use cross-region inference profile
             const supervisorInferenceProfile = CrossRegionInferenceProfile.fromConfig({
                 geoRegion: CrossRegionInferenceProfileRegion.US,
-                // Use Claude model for best cross-region support
-                model: novaProModel,
+                model: supervisorModel,
             });
 
             supervisorAgent = new Agent(this, "supervisorAgent", {
@@ -263,7 +260,7 @@ export class MultiAgent extends Construct {
                         "bedrock:GetFoundationModel",
                     ],
                     resources: [
-                        `arn:aws:bedrock:*::foundation-model/${novaProModel.modelId}`,
+                        `arn:aws:bedrock:*::foundation-model/${supervisorModel.modelId}`,
                         supervisorInferenceProfile.inferenceProfileArn,
                     ],
                 })

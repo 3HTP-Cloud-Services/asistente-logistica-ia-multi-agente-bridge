@@ -1,4 +1,4 @@
-import { Aspects, Stage, StageProps } from "aws-cdk-lib";
+import { Aspects, Stage, StageProps, Tags } from "aws-cdk-lib";
 import { AwsSolutionsChecks, NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import { projectConfig } from "../../../config";
@@ -11,6 +11,10 @@ export class ApplicationStage extends Stage {
         
         // Set CDK_DEFAULT_REGION for the AWS PowerTools layer
         process.env.CDK_DEFAULT_REGION = props.env?.region || 'us-east-1';
+
+        // Tags obligatorias para todos los recursos del stack
+        Tags.of(this).add("bridge", "kroni");
+        Tags.of(this).add("createdby", "REPLACE_WITH_YOUR_NAME");
 
         // Leer features del config (por defecto todo activado para compatibilidad)
         const features = projectConfig.features ?? {
